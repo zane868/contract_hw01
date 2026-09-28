@@ -1,8 +1,6 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
-import {console2} from "forge-std/console2.sol";
-
 contract RomanNumberUtil {
     mapping(string => uint) romanIntMapping;
 
@@ -49,7 +47,6 @@ contract RomanNumberUtil {
     function RomanToInt(string memory _input) public view returns (uint) {
         uint total = 0;
         bytes memory chars = bytes(_input);
-        console2.log("input", _input);
         for (uint i = 0; i < chars.length;) {
             uint currentVal = romanIntMappingForBytes[chars[i]];
 

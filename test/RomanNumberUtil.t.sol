@@ -3,33 +3,59 @@ pragma solidity ^0.8.24;
 
 import {Test} from "forge-std/Test.sol";
 import {RomanNumberUtil} from "../contracts/RomanNumberUtil.sol";
-import {console2} from "forge-std/console2.sol";
-import {Strings} from "@openzeppelin/contracts/utils/Strings.sol";
+
 contract RomanNumberUtilTest is Test {
     RomanNumberUtil util;
 
-    // 每个测试执行前，部署一个新的合约实例。
     function setUp() public {
         util = new RomanNumberUtil();
     }
 
-    function test_IntToRoman_RevertsForZero() public {
-        for (uint i = 1; i <= 3999; i++) {
-            string memory romanResult = util.IntToRoman(i);
-            uint intResult = util.RomanToInt(romanResult);
-            string memory result = string.concat(
-                Strings.toString(i),
-                "=>",
-                romanResult,
-                "=>",
-                Strings.toString(intResult)
-            );
-            console2.log(result);
-        }
+    // ---- IntToRoman ----
+
+    function test_IntToRoman_ZeroReverts() public {
+        vm.expectRevert(bytes("you must > 0"));
+        util.IntToRoman(0);
     }
 
-    // 完成转换逻辑后，可按下面的格式添加测试：
-    // function test_IntToRoman_One() public view {
-    //     assertEq(util.IntToRoman(1), "I");
-    // }
+    function test_IntToRoman_One() public view {
+        assertEq(util.IntToRoman(1), "I");
+    }
+
+    function test_IntToRoman_Four() public view {
+        assertEq(util.IntToRoman(4), "IV");
+    }
+
+    function test_IntToRoman_Nine() public view {
+        assertEq(util.IntToRoman(9), "IX");
+    }
+
+    function test_IntToRoman_58() public view {
+        assertEq(util.IntToRoman(58), "LVIII");
+    }
+
+    function test_IntToRoman_1994() public view {
+        assertEq(util.IntToRoman(1994), "MCMXCIV");
+    }
+
+    // ---- RomanToInt ----
+
+    function test_RomanToInt_III() public view {
+        assertEq(util.RomanToInt("III"), 3);
+    }
+
+    function test_RomanToInt_LVIII() public view {
+        assertEq(util.RomanToInt("LVIII"), 58);
+    }
+
+    function test_RomanToInt_MCMXCIV() public view {
+        assertEq(util.RomanToInt("MCMXCIV"), 1994);
+    }
+
+    // ---- 往返一致性（fuzz）----
+
+    function testFuzz_RoundTrip(uint256 n) public view {
+        n = bound(n, 1, 3999);
+        assertEq(util.RomanToInt(util.IntToRoman(n)), n);
+    }
 }
