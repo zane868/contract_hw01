@@ -1,0 +1,382 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Voting 投票 DApp</title>
+  <script src="https://cdn.jsdelivr.net/npm/ethers@6.13.0/dist/ethers.umd.min.js"></script>
+  <style>
+    :root {
+      --bg: #0f1117;
+      --card: #171a23;
+      --border: #262b38;
+      --text: #e6e8ee;
+      --muted: #8b90a0;
+      --accent: #6366f1;
+      --accent-2: #818cf8;
+      --ok: #34d399;
+      --err: #f87171;
+      --radius: 12px;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      padding: 24px;
+    }
+    .wrap { max-width: 720px; margin: 0 auto; }
+    header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 12px;
+      margin-bottom: 20px;
+    }
+    h1 { font-size: 22px; margin: 0; }
+    .badge {
+      font-size: 12px;
+      color: var(--accent-2);
+      background: rgba(99, 102, 241, 0.12);
+      border: 1px solid rgba(99, 102, 241, 0.3);
+      padding: 4px 10px;
+      border-radius: 999px;
+    }
+    .head-right { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+    #account { font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; }
+    button {
+      font: inherit;
+      cursor: pointer;
+      border: none;
+      border-radius: 8px;
+      padding: 9px 16px;
+      color: #fff;
+      background: var(--accent);
+      transition: filter .15s, transform .05s;
+    }
+    button:hover { filter: brightness(1.1); }
+    button:active { transform: translateY(1px); }
+    button:disabled { opacity: .5; cursor: not-allowed; }
+    .ghost { background: transparent; border: 1px solid var(--border); color: var(--text); }
+    .danger { background: #dc2626; }
+    .status { color: var(--muted); font-size: 14px; margin: 0 0 16px; min-height: 20px; }
+    .card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 16px;
+      margin-bottom: 16px;
+    }
+    .card h2 { margin: 0 0 12px; font-size: 15px; color: var(--muted); font-weight: 600; }
+    .candidate {
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 12px 14px;
+      margin-bottom: 10px;
+      background: #12151d;
+    }
+    .candidate-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+    }
+    .candidate-name { font-weight: 600; font-size: 16px; }
+    .vote-btn { padding: 6px 14px; font-size: 13px; }
+    .votes { color: var(--muted); font-size: 13px; margin: 6px 0; }
+    .bar { height: 6px; border-radius: 999px; background: var(--border); overflow: hidden; }
+    .bar-fill { height: 100%; background: linear-gradient(90deg, var(--accent), var(--accent-2)); transition: width .4s ease; }
+    .empty { color: var(--muted); font-size: 14px; }
+    .row { display: flex; gap: 8px; margin-bottom: 10px; }
+    input {
+      flex: 1;
+      font: inherit;
+      padding: 9px 12px;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      background: #0b0d13;
+      color: var(--text);
+      outline: none;
+    }
+    input:focus { border-color: var(--accent); }
+    .toast {
+      position: fixed;
+      left: 50%;
+      bottom: 30px;
+      transform: translateX(-50%) translateY(20px);
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-left: 4px solid var(--ok);
+      color: var(--text);
+      padding: 12px 18px;
+      border-radius: 10px;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity .2s, transform .2s;
+      font-size: 14px;
+      max-width: 80vw;
+      z-index: 10;
+    }
+    .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+    .toast.err { border-left-color: var(--err); }
+    .hint { font-size: 12px; color: var(--muted); margin-top: 10px; line-height: 1.6; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <h1>🗳️ Voting</h1>
+      <div class="head-right">
+        <span class="badge">Sepolia Testnet</span>
+        <span id="account"></span>
+        <button id="connectBtn">连接钱包</button>
+      </div>
+    </header>
+
+    <p class="status" id="votedStatus"></p>
+
+    <div class="card">
+      <h2>候选人</h2>
+      <div id="candidates"><p class="empty">加载中…</p></div>
+      <div class="row" style="margin-top: 12px;">
+        <button class="ghost" id="refreshBtn">刷新</button>
+      </div>
+    </div>
+
+    <div class="card" id="ownerPanel" hidden>
+      <h2>管理员操作（仅 owner）</h2>
+      <div class="row">
+        <input id="addName" placeholder="新候选人名称（<10 字节）" />
+        <button id="addBtn">新增</button>
+      </div>
+      <div class="row">
+        <input id="removeName" placeholder="要移除的候选人名称" />
+        <button class="danger" id="removeBtn">移除</button>
+      </div>
+      <div class="row">
+        <button class="danger" id="resetBtn">重置所有票数</button>
+      </div>
+    </div>
+
+    <p class="hint">
+      代理地址：<code>0xC5A410D232d2DCb4a96c58A6970f656bB89661af</code><br />
+      投票前请先在 MetaMask 里切到 Sepolia 网络（页面会自动切换）。
+    </p>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+  <script>
+    const { ethers } = window;
+
+    const CONTRACT_ADDRESS = "0xC5A410D232d2DCb4a96c58A6970f656bB89661af";
+    const READONLY_RPC = "https://ethereum-sepolia-rpc.publicnode.com";
+
+    const ABI = [{"inputs":[],"stateMutability":"nonpayable","type":"constructor"},{"inputs":[{"internalType":"address","name":"target","type":"address"}],"name":"AddressEmptyCode","type":"error"},{"inputs":[{"internalType":"address","name":"implementation","type":"address"}],"name":"ERC1967InvalidImplementation","type":"error"},{"inputs":[],"name":"ERC1967NonPayable","type":"error"},{"inputs":[],"name":"FailedCall","type":"error"},{"inputs":[],"name":"InvalidInitialization","type":"error"},{"inputs":[],"name":"NotInitializing","type":"error"},{"inputs":[{"internalType":"address","name":"owner","type":"address"}],"name":"OwnableInvalidOwner","type":"error"},{"inputs":[{"internalType":"address","name":"account","type":"address"}],"name":"OwnableUnauthorizedAccount","type":"error"},{"inputs":[],"name":"UUPSUnauthorizedCallContext","type":"error"},{"inputs":[{"internalType":"bytes32","name":"slot","type":"bytes32"}],"name":"UUPSUnsupportedProxiableUUID","type":"error"},{"anonymous":false,"inputs":[{"indexed":false,"internalType":"string","name":"candidate","type":"string"}],"name":"CandidateAdded","type":"event"},{"anonymous":false,"inputs":[{"indexed":false,"internalType":"string","name":"candidate","type":"string"}],"name":"CandidateRemoved","type":"event"},{"anonymous":false,"inputs":[{"indexed":false,"internalType":"uint64","name":"version","type":"uint64"}],"name":"Initialized","type":"event"},{"anonymous":false,"inputs":[{"indexed":true,"internalType":"address","name":"previousOwner","type":"address"},{"indexed":true,"internalType":"address","name":"newOwner","type":"address"}],"name":"OwnershipTransferred","type":"event"},{"anonymous":false,"inputs":[{"indexed":true,"internalType":"address","name":"implementation","type":"address"}],"name":"Upgraded","type":"event"},{"anonymous":false,"inputs":[{"indexed":true,"internalType":"address","name":"voter","type":"address"},{"indexed":false,"internalType":"string","name":"candidate","type":"string"}],"name":"Voted","type":"event"},{"inputs":[{"internalType":"string","name":"_name","type":"string"}],"name":"AddCandidate","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[],"name":"GetAllCandidate","outputs":[{"internalType":"string[]","name":"","type":"string[]"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"string","name":"candidateName","type":"string"}],"name":"GetVotes","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"string","name":"_name","type":"string"}],"name":"RemoveCandidate","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[],"name":"ResetVotes","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[],"name":"UPGRADE_INTERFACE_VERSION","outputs":[{"internalType":"string","name":"","type":"string"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"string","name":"candidateName","type":"string"}],"name":"Vote","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[{"internalType":"string","name":"candidateName","type":"string"}],"name":"candidateExists","outputs":[{"internalType":"bool","name":"","type":"bool"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"hasVoted","outputs":[{"internalType":"bool","name":"","type":"bool"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"address","name":"initialOwner","type":"address"}],"name":"initialize","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[],"name":"owner","outputs":[{"internalType":"address","name":"","type":"address"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"proxiableUUID","outputs":[{"internalType":"bytes32","name":"","type":"bytes32"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"renounceOwnership","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[{"internalType":"address","name":"newOwner","type":"address"}],"name":"transferOwnership","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[{"internalType":"address","name":"newImplementation","type":"address"},{"internalType":"bytes","name":"data","type":"bytes"}],"name":"upgradeToAndCall","outputs":[],"stateMutability":"payable","type":"function"}];
+
+    const els = {
+      connectBtn: document.getElementById("connectBtn"),
+      account: document.getElementById("account"),
+      votedStatus: document.getElementById("votedStatus"),
+      candidates: document.getElementById("candidates"),
+      refreshBtn: document.getElementById("refreshBtn"),
+      ownerPanel: document.getElementById("ownerPanel"),
+      addName: document.getElementById("addName"),
+      addBtn: document.getElementById("addBtn"),
+      removeName: document.getElementById("removeName"),
+      removeBtn: document.getElementById("removeBtn"),
+      resetBtn: document.getElementById("resetBtn"),
+      toast: document.getElementById("toast"),
+    };
+
+    const readProvider = new ethers.JsonRpcProvider(READONLY_RPC);
+    let signer = null;
+    let currentAccount = null;
+
+    function activeContract() {
+      return new ethers.Contract(CONTRACT_ADDRESS, ABI, signer ?? readProvider);
+    }
+
+    function toast(msg, ok = true) {
+      els.toast.textContent = msg;
+      els.toast.className = "toast " + (ok ? "" : "err");
+      els.toast.classList.add("show");
+      clearTimeout(toast._t);
+      toast._t = setTimeout(() => els.toast.classList.remove("show"), 3200);
+    }
+
+    function short(addr) {
+      return addr.slice(0, 6) + "…" + addr.slice(-4);
+    }
+
+    async function connect() {
+      if (!window.ethereum) {
+        toast("请先安装 MetaMask 浏览器插件", false);
+        return;
+      }
+      try {
+        // 确保在 Sepolia（chainId 11155111 = 0xaa36a7）
+        try {
+          await window.ethereum.request({
+            method: "wallet_switchEthereumChain",
+            params: [{ chainId: "0xaa36a7" }],
+          });
+        } catch (e) {
+          if (e.code === 4902) {
+            await window.ethereum.request({
+              method: "wallet_addEthereumChain",
+              params: [{
+                chainId: "0xaa36a7",
+                chainName: "Sepolia",
+                rpcUrls: [READONLY_RPC],
+                nativeCurrency: { name: "SepoliaETH", symbol: "ETH", decimals: 18 },
+              }],
+            });
+          } else {
+            throw e;
+          }
+        }
+
+        const browserProvider = new ethers.BrowserProvider(window.ethereum);
+        await browserProvider.send("eth_requestAccounts", []);
+        signer = await browserProvider.getSigner();
+        currentAccount = await signer.getAddress();
+        els.account.textContent = short(currentAccount);
+        await Promise.all([renderAccount(), loadCandidates()]);
+        toast("钱包已连接");
+      } catch (err) {
+        console.error(err);
+        toast("连接失败：" + (err.shortMessage || err.message || err), false);
+      }
+    }
+
+    async function renderAccount() {
+      if (!signer) {
+        els.votedStatus.textContent = "";
+        els.ownerPanel.hidden = true;
+        return;
+      }
+      try {
+        const c = activeContract();
+        const [owner, voted] = await Promise.all([c.owner(), c.hasVoted()]);
+        els.votedStatus.textContent = voted ? "✅ 你已投过票" : "ℹ️ 你尚未投票";
+        const isOwner = owner.toLowerCase() === currentAccount.toLowerCase();
+        els.ownerPanel.hidden = !isOwner;
+      } catch (e) {
+        console.error(e);
+      }
+    }
+
+    async function loadCandidates() {
+      const c = activeContract();
+      try {
+        const names = await c.GetAllCandidate();
+        const votes = await Promise.all(names.map((n) => c.GetVotes(n)));
+        renderCandidates(names, votes);
+      } catch (e) {
+        console.error(e);
+        els.candidates.innerHTML = '<p class="empty">加载失败，请检查网络</p>';
+      }
+    }
+
+    function renderCandidates(names, votes) {
+      let max = 0n;
+      for (const v of votes) if (v > max) max = v;
+      els.candidates.innerHTML = "";
+      if (names.length === 0) {
+        els.candidates.innerHTML = '<p class="empty">暂无候选人</p>';
+        return;
+      }
+      names.forEach((name, i) => {
+        const v = votes[i];
+        const pct = max > 0n ? Number((v * 100n) / max) : 0;
+        const card = document.createElement("div");
+        card.className = "candidate";
+        card.innerHTML =
+          '<div class="candidate-head">' +
+            '<span class="candidate-name">' + name + "</span>" +
+            '<button class="vote-btn" data-name="' + name + '">投票</button>' +
+          "</div>" +
+          '<div class="votes">' + v.toString() + " 票</div>" +
+          '<div class="bar"><div class="bar-fill" style="width:' + pct + '%"></div></div>';
+        card.querySelector(".vote-btn").addEventListener("click", () => vote(name));
+        els.candidates.appendChild(card);
+      });
+    }
+
+    async function vote(name) {
+      try {
+        if (!signer) { toast("请先连接钱包", false); return; }
+        const c = activeContract();
+        const tx = await c.Vote(name);
+        toast("交易已提交，等待确认…");
+        await tx.wait();
+        toast("投票成功！");
+        await Promise.all([renderAccount(), loadCandidates()]);
+      } catch (e) {
+        console.error(e);
+        toast("投票失败：" + (e.shortMessage || e.message || e), false);
+      }
+    }
+
+    async function ownerAction(fn, successMsg) {
+      try {
+        if (!signer) { toast("请先连接钱包", false); return; }
+        const c = activeContract();
+        const tx = await fn(c);
+        toast("交易已提交，等待确认…");
+        await tx.wait();
+        toast(successMsg);
+        await Promise.all([renderAccount(), loadCandidates()]);
+      } catch (e) {
+        console.error(e);
+        toast("操作失败：" + (e.shortMessage || e.message || e), false);
+      }
+    }
+
+    function addCandidate() {
+      const name = els.addName.value.trim();
+      if (!name) { toast("请输入候选人名称", false); return; }
+      ownerAction((c) => c.AddCandidate(name), "新增候选人成功");
+      els.addName.value = "";
+    }
+
+    function removeCandidate() {
+      const name = els.removeName.value.trim();
+      if (!name) { toast("请输入候选人名称", false); return; }
+      ownerAction((c) => c.RemoveCandidate(name), "移除候选人成功");
+      els.removeName.value = "";
+    }
+
+    function resetVotes() {
+      if (!confirm("确定要重置所有候选人的票数吗？")) return;
+      ownerAction((c) => c.ResetVotes(), "已重置所有票数");
+    }
+
+    els.connectBtn.addEventListener("click", connect);
+    els.refreshBtn.addEventListener("click", loadCandidates);
+    els.addBtn.addEventListener("click", addCandidate);
+    els.removeBtn.addEventListener("click", removeCandidate);
+    els.resetBtn.addEventListener("click", resetVotes);
+
+    // 初始加载（只读）
+    loadCandidates();
+    // 每 12 秒自动刷新
+    setInterval(loadCandidates, 12000);
+
+    // 账户 / 网络切换监听
+    if (window.ethereum) {
+      window.ethereum.on("accountsChanged", () => {
+        signer = null;
+        currentAccount = null;
+        els.account.textContent = "";
+        renderAccount();
+      });
+      window.ethereum.on("chainChanged", () => window.location.reload());
+    }
+  </script>
+</body>
+</html>
