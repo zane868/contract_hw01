@@ -3,7 +3,6 @@ pragma solidity ^0.8.24;
 
 import {Test} from "forge-std/Test.sol";
 import {BinarySearch} from "../contracts/BinarySearch.sol";
-import {console2} from "forge-std/console2.sol";
 contract BinarySearchTest is Test {
     BinarySearch searcher;
 
@@ -26,7 +25,6 @@ contract BinarySearchTest is Test {
         input[9] = 33;
         // 调用查找函数
         int result = searcher.search(input, 0);
-        console2.log(result);
         // 目标值 0 位于下标 1
         assertEq(result, 1);
     }
